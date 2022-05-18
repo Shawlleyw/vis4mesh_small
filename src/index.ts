@@ -7,9 +7,9 @@ class Switch {
 	y: number
 
 	constructor(id: number, x: number, y: number) {
-		this.id = id
-		this.x = x
-		this.y = y
+		this.id = id;
+		this.x = x;
+		this.y = y;
 	}
 }
 
@@ -22,16 +22,16 @@ class Minimap {
 	}
 
 	draw(tile_width: number, tile_height: number) {
-		const canvas = document.getElementById("minimap")!
-		const canvas_width = canvas.clientWidth
-		const canvas_height = canvas.clientHeight
+		const canvas = document.getElementById("minimap")!;
+		const canvas_width = canvas.clientWidth;
+		const canvas_height = canvas.clientHeight;
 
-		const width_scale = canvas_width / tile_width
-		const height_scale = canvas_height / tile_height
-		this.scale = Math.min(width_scale, height_scale) * .9
+		const width_scale = canvas_width / tile_width;
+		const height_scale = canvas_height / tile_height;
+		this.scale = Math.min(width_scale, height_scale) * .9;
 
-		this.offset_x = canvas_width / 2 - tile_width / 2 * this.scale
-		this.offset_y = canvas_height / 2 - tile_height / 2 * this.scale
+		this.offset_x = canvas_width / 2 - tile_width / 2 * this.scale;
+		this.offset_y = canvas_height / 2 - tile_height / 2 * this.scale;
 
 		const wafer_mini = d3.select("#wafer-mini");
 		wafer_mini
@@ -40,7 +40,7 @@ class Minimap {
 			.attr("width", tile_width * this.scale)
 			.attr("height", tile_height * this.scale)
 			.attr("fill", "white")
-			.attr("stroke", "blue")
+			.attr("stroke", "blue");
 	}
 
 	update_minimap_viewport_box(
@@ -54,11 +54,12 @@ class Minimap {
 			.attr("width", width * this.scale)
 			.attr("height", height * this.scale)
 			.attr("fill", "none")
-			.attr("stroke", "green")
+			.attr("stroke", "green");
 	}
 }
 
 class MainView {
+	
 	minimap: Minimap
 	tile_width: number
 	tile_height: number
@@ -68,21 +69,20 @@ class MainView {
 	max_x: number = 0
 	min_y: number = 0
 	max_y: number = 0
+	readonly node_size = 0.6;
+	readonly canvas = d3.select("#grid");
 
 	constructor(
 		minimap: Minimap,
 		switches: Switch[][],
 	) {
-		this.minimap = minimap
-		this.tile_width = switches[0].length
-		this.tile_height = switches.length
-		this.switches = switches
+		this.minimap = minimap;
+		this.tile_width = switches[0].length;
+		this.tile_height = switches.length;
+		this.switches = switches;
 	}
 
-	draw() {
-		const node_size = 0.6
-		const canvas = d3.select<SVGGElement, unknown>("#grid")
-
+	get_masked_node() {
 		let filtered_switches: Switch[] = []
 		for (let i = 0; i < this.tile_height; i++) {
 			for (let j = 0; j < this.tile_width; j++) {
@@ -93,36 +93,66 @@ class MainView {
 				}
 			}
 		}
+		return filtered_switches;
+	}
 
-		const rect = canvas.selectAll<SVGRectElement, Switch>("rect")
-			.data(filtered_switches, (d) => d.id)
+	draw_rect(filtered_switches: Switch[]) {
+		this.canvas.selectAll("rect")
+		.data(filtered_switches)
+		.join(
+			(enter)=> enter.append("rect"),
+			(update)=> update,
+			(end)=> end.remove()
+		)
+		.attr("x", (d) => d.x - this.node_size / 2)
+		.attr("y", (d) => d.y - this.node_size / 2)
+		.attr("width", (d) => {
+			if (this.scale == 1) { return this.node_size }
+			else { return this.node_size * this.scale }
+		})
+		.attr("height", (d) => {
+			if (this.scale == 1) { return this.node_size }
+			else { return this.node_size * this.scale }
+		})
+		.attr("fill", "red")
+		.attr("stroke", "blue")
+		.attr("stroke-width", this.scale * .02);
+	}
 
-		const rect_enter = rect.enter().append("rect")
-			.attr("x", (d) => d.x - node_size / 2)
-			.attr("y", (d) => d.y - node_size / 2)
+	draw_text(filtered_switches: Switch[]) {
+		this.canvas.selectAll("text")
+		.data(filtered_switches)
+		.join(
+			function(enter) {
+				return enter.append("text")
+			},
+			function(update) {
+				return update;
+			},
+			function(exit) {
+				return exit.remove();
+			}
+		)
+		.attr("x", (d)=> d.x - this.node_size/2)
+		.attr("y", (d)=> d.y)
+		.attr("font-size", this.node_size*this.scale/5)
+		.text((d)=> `${d.x}, ${d.y}`);
+	}
 
+	draw() {
+		const filtered_switches = this.get_masked_node();
 
-		rect.merge(rect_enter)
-			.attr("width", (d) => {
-				if (this.scale == 1) { return node_size }
-				else { return node_size * this.scale }
-			})
-			.attr("height", (d) => {
-				if (this.scale == 1) { return node_size }
-				else { return node_size * this.scale }
-			})
-			.attr("fill", "white")
-			.attr("stroke", "blue")
-			.attr("stroke-width", this.scale * .02)
-
-		rect.exit().remove()
+		this.draw_rect(filtered_switches);
+		// this.draw_text(filtered_switches);
+		
+		console.log("draw mesh ", this.scale);
 	}
 
 	initial_transform_param(): [number[], number] {
-		const canvas = d3.select<SVGSVGElement, unknown>("#canvas")
+		const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
 
-		const canvas_width = canvas.node()!.clientWidth
-		const canvas_height = canvas.node()!.clientHeight
+		const canvas_width = canvas.node()!.clientWidth;
+		const canvas_height = canvas.node()!.clientHeight;
 
 		const scale_x = canvas_width / this.tile_width;
 		const scale_y = canvas_height / this.tile_height;
@@ -131,15 +161,15 @@ class MainView {
 		const translate_x = canvas_width / 2 - this.tile_width / 2 * scale;
 		const translate_y = canvas_height / 2 - this.tile_height / 2 * scale;
 
-		return [[translate_x, translate_y], scale]
+		return [[translate_x, translate_y], scale];
 	}
 
 	initialize_zoom() {
 		const [initial_translate, initial_scale] =
-			this.initial_transform_param()
+			this.initial_transform_param();
 
-		const canvas = d3.select<SVGSVGElement, unknown>("#canvas")
-		const zoomBehavior = d3.zoom<SVGSVGElement, unknown>()
+		const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
+		const zoomBehavior = d3.zoom<SVGSVGElement, unknown>();
 		canvas
 			.call(zoomBehavior.on("zoom", (e) => {
 				this.update_zoom(e.transform)
@@ -149,84 +179,86 @@ class MainView {
 				d3.zoomIdentity
 					.translate(initial_translate[0], initial_translate[1])
 					.scale(initial_scale)
-			)
+			);
 	}
 
 	update_zoom(transform: d3.ZoomTransform) {
-		const canvas = d3.select<SVGSVGElement, unknown>("#canvas")
-		const grid = d3.select<SVGGElement, unknown>("#grid")
+		const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
+		const grid = d3.select<SVGGElement, unknown>("#grid");
 
-		grid.attr("transform", transform.toString())
+		grid.attr("transform", transform.toString());
 
-		const top_left = this.reverse_mapping([0, 0], transform)
+		const top_left = this.reverse_mapping([0, 0], transform);
 		const bottom_right = this.reverse_mapping(
 			[canvas.node()!.clientWidth, canvas.node()!.clientHeight],
-			transform)
-		const viewport_width = bottom_right[0] - top_left[0]
-		const viewport_height = bottom_right[1] - top_left[1]
+			transform);
+		const viewport_width = bottom_right[0] - top_left[0];
+		const viewport_height = bottom_right[1] - top_left[1];
 
-		this.min_x = top_left[0]
-		this.max_x = bottom_right[0]
-		this.min_y = top_left[1]
-		this.max_y = bottom_right[1]
+		this.min_x = top_left[0];
+		this.max_x = bottom_right[0];
+		this.min_y = top_left[1];
+		this.max_y = bottom_right[1];
 
 		this.minimap.update_minimap_viewport_box(
-			top_left[1], top_left[0], viewport_width, viewport_height)
+			top_left[1], top_left[0], viewport_width, viewport_height);
 
-		this.update_semantic_zoom(viewport_width, viewport_height)
+		this.update_semantic_zoom(viewport_width, viewport_height);
+		console.log(viewport_height, viewport_width);
 	}
 
 	update_semantic_zoom(width: number, height: number) {
 		let count = width * height;
-		this.scale = 1
+		this.scale = 1;
 		while (count > 500) { // At most 1000 nodes
-			count /= 16
-			this.scale *= 4
+			count /= 16;
+			this.scale *= 4;
 		}
+		console.log(this.scale);
 
-		this.draw()
+		this.draw();
 	}
 
 	reverse_mapping(
 		coord: number[],
 		transform: d3.ZoomTransform,
 	): number[] {
-		const scale = transform.k
-		const translate_x = transform.x
-		const translate_y = transform.y
+		const scale = transform.k;
+		const translate_x = transform.x;
+		const translate_y = transform.y;
 
-		const x_ = (coord[0] - translate_x) / scale
-		const y_ = (coord[1] - translate_y) / scale
+		const x_ = (coord[0] - translate_x) / scale;
+		const y_ = (coord[1] - translate_y) / scale;
 
-		return [x_, y_]
+		return [x_, y_];
 	}
 }
 
 
 function generate_data(width: number, height: number): Switch[][] {
-	const switches: Switch[][] = []
+	const switches: Switch[][] = [];
 	for (let i = 0; i < height; i++) {
-		switches.push([])
+		switches.push([]);
 		for (let j = 0; j < width; j++) {
-			switches[i].push(new Switch(i * width + j, j, i))
+			switches[i].push(new Switch(i * width + j, j, i));
 		}
 	}
 
-	return switches
+	return switches;
 }
 
 document.addEventListener("DOMContentLoaded", (event) => {
 	const tile_width = 1024;
-	const tile_height = 768;
+	const tile_height = 1024;
 
-	const switches = generate_data(tile_width, tile_height)
+	const switches = generate_data(tile_width, tile_height);
 
-	const minimap = new Minimap()
-	minimap.draw(tile_width, tile_height)
+	const minimap = new Minimap();
+	minimap.draw(tile_width, tile_height);
 
-	const main_view = new MainView(minimap, switches)
-	main_view.draw()
-	main_view.initialize_zoom()
+	const main_view = new MainView(minimap, switches);
+	// main_view.draw();
+	main_view.initialize_zoom();
 });
 
 // class SwitchLevel {
