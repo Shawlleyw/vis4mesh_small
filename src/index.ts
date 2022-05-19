@@ -1,5 +1,4 @@
 import * as d3 from "d3";
-import { zoom } from "d3";
 
 class Switch {
 	id: number
