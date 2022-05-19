@@ -114,7 +114,7 @@ class MainView {
 			if (this.scale == 1) { return this.node_size }
 			else { return this.node_size * this.scale }
 		})
-		.attr("fill", "red")
+		.attr("fill", "white")
 		.attr("stroke", "blue")
 		.attr("stroke-width", this.scale * .02);
 	}
