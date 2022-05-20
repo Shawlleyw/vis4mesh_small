@@ -1,540 +1,293 @@
 import * as d3 from "d3";
 
 class Switch {
-	id: number
-	x: number
-	y: number
+  id: number;
+  x: number;
+  y: number;
 
-	constructor(id: number, x: number, y: number) {
-		this.id = id;
-		this.x = x;
-		this.y = y;
-	}
+  constructor(id: number, x: number, y: number) {
+    this.id = id;
+    this.x = x;
+    this.y = y;
+  }
 }
 
 class Minimap {
-	scale: number = 1024
-	offset_x: number = 0
-	offset_y: number = 0
+  scale: number = 1024;
+  offset_x: number = 0;
+  offset_y: number = 0;
 
-	constructor() {
-	}
+  constructor() {}
 
-	draw(tile_width: number, tile_height: number) {
-		const canvas = document.getElementById("minimap")!;
-		const canvas_width = canvas.clientWidth;
-		const canvas_height = canvas.clientHeight;
+  draw(tile_width: number, tile_height: number) {
+    const canvas = document.getElementById("minimap")!;
+    const canvas_width = canvas.clientWidth;
+    const canvas_height = canvas.clientHeight;
 
-		const width_scale = canvas_width / tile_width;
-		const height_scale = canvas_height / tile_height;
-		this.scale = Math.min(width_scale, height_scale) * .9;
+    const width_scale = canvas_width / tile_width;
+    const height_scale = canvas_height / tile_height;
+    this.scale = Math.min(width_scale, height_scale) * 0.9;
 
-		this.offset_x = canvas_width / 2 - tile_width / 2 * this.scale;
-		this.offset_y = canvas_height / 2 - tile_height / 2 * this.scale;
+    this.offset_x = canvas_width / 2 - (tile_width / 2) * this.scale;
+    this.offset_y = canvas_height / 2 - (tile_height / 2) * this.scale;
 
-		const wafer_mini = d3.select("#wafer-mini");
-		wafer_mini
-			.attr("x", this.offset_x)
-			.attr("y", this.offset_y)
-			.attr("width", tile_width * this.scale)
-			.attr("height", tile_height * this.scale)
-			.attr("fill", "white")
-			.attr("stroke", "blue");
-	}
+    const wafer_mini = d3.select("#wafer-mini");
+    wafer_mini
+      .attr("x", this.offset_x)
+      .attr("y", this.offset_y)
+      .attr("width", tile_width * this.scale)
+      .attr("height", tile_height * this.scale)
+      .attr("fill", "white")
+      .attr("stroke", "blue");
+  }
 
-	update_minimap_viewport_box(
-		top: number, left: number, width: number, height: number
-	) {
-		const viewport_box = d3.select("#minimap-viewport-box");
+  update_minimap_viewport_box(
+    top: number,
+    left: number,
+    width: number,
+    height: number
+  ) {
+    const viewport_box = d3.select("#minimap-viewport-box");
 
-		viewport_box
-			.attr("x", left * this.scale + this.offset_x)
-			.attr("y", top * this.scale + this.offset_y)
-			.attr("width", width * this.scale)
-			.attr("height", height * this.scale)
-			.attr("fill", "none")
-			.attr("stroke", "green");
-	}
+    viewport_box
+      .attr("x", left * this.scale + this.offset_x)
+      .attr("y", top * this.scale + this.offset_y)
+      .attr("width", width * this.scale)
+      .attr("height", height * this.scale)
+      .attr("fill", "none")
+      .attr("stroke", "green");
+  }
 }
 
 class MainView {
-	
-	minimap: Minimap
-	tile_width: number
-	tile_height: number
-	switches: Switch[][]
-	scale: number = 1024
-	min_x: number = 0
-	max_x: number = 0
-	min_y: number = 0
-	max_y: number = 0
-	readonly node_size = 0.6;
-	readonly canvas = d3.select("#grid");
+  minimap: Minimap;
+  tile_width: number;
+  tile_height: number;
+  switches: Switch[][];
+  scale: number = 0; // abstract node, size of scale*scale
+  min_x: number = 0;
+  max_x: number = 0;
+  min_y: number = 0;
+  max_y: number = 0;
+  rect_size: number = 0; // reassign each time by this.draw()
+  readonly node_size_ratio = 0.6;
+  readonly grid = d3.select("#grid");
 
-	constructor(
-		minimap: Minimap,
-		switches: Switch[][],
-	) {
-		this.minimap = minimap;
-		this.tile_width = switches[0].length;
-		this.tile_height = switches.length;
-		this.switches = switches;
-	}
+  constructor(minimap: Minimap, switches: Switch[][]) {
+    this.minimap = minimap;
+    this.tile_width = switches[0].length;
+    this.tile_height = switches.length;
+    this.switches = switches;
+  }
 
-	get_masked_node() {
-		let filtered_switches: Switch[] = []
-		for (let i = 0; i < this.tile_height; i++) {
-			for (let j = 0; j < this.tile_width; j++) {
-				if (i % this.scale == 0 && j % this.scale == 0 &&
-					i >= this.min_y && i < this.max_y &&
-					j >= this.min_x && j < this.max_x) {
-					filtered_switches.push(this.switches[i][j])
-				}
-			}
-		}
-		return filtered_switches;
-	}
+  within_view(i_height: number, j_width: number): boolean {
+    let center_y = i_height + this.scale / 2;
+    let center_x = j_width + this.scale / 2;
+    let top = center_y - this.rect_size / 2;
+    let bottom = top + this.rect_size;
+    let left = center_x - this.rect_size / 2;
+    let right = left + this.rect_size;
+    return (
+      bottom >= this.min_y &&
+      top <= this.max_y &&
+      right >= this.min_x &&
+      left <= this.max_x
+    );
+  }
 
-	draw_rect(filtered_switches: Switch[]) {
-		this.canvas.selectAll("rect")
-		.data(filtered_switches)
-		.join(
-			(enter)=> enter.append("rect"),
-			(update)=> update,
-			(end)=> end.remove()
-		)
-		.attr("x", (d) => d.x - this.node_size / 2)
-		.attr("y", (d) => d.y - this.node_size / 2)
-		.attr("width", (d) => {
-			if (this.scale == 1) { return this.node_size }
-			else { return this.node_size * this.scale }
-		})
-		.attr("height", (d) => {
-			if (this.scale == 1) { return this.node_size }
-			else { return this.node_size * this.scale }
-		})
-		.attr("fill", "white")
-		.attr("stroke", "blue")
-		.attr("stroke-width", this.scale * .02);
-	}
+  // reassign this.rect_size to suit the window before draw
+  get_rect_size() {
+    this.rect_size = this.scale * this.node_size_ratio;
+  }
 
-	draw_text(filtered_switches: Switch[]) {
-		this.canvas.selectAll("text")
-		.data(filtered_switches)
-		.join(
-			function(enter) {
-				return enter.append("text")
-			},
-			function(update) {
-				return update;
-			},
-			function(exit) {
-				return exit.remove();
-			}
-		)
-		.attr("x", (d)=> d.x - this.node_size/2)
-		.attr("y", (d)=> d.y)
-		.attr("font-size", this.node_size*this.scale/5)
-		.text((d)=> `${d.x}, ${d.y}`);
-	}
+  get_masked_node() {
+    let filtered_switches: Switch[] = [];
+    for (let i = 0; i < this.tile_height; i++) {
+      for (let j = 0; j < this.tile_width; j++) {
+        if (
+          i % this.scale == 0 &&
+          j % this.scale == 0 &&
+          this.within_view(i, j)
+        ) {
+          filtered_switches.push(this.switches[i][j]);
+        }
+      }
+    }
+    return filtered_switches;
+  }
 
-	draw() {
-		const filtered_switches = this.get_masked_node();
+  draw_rect(filtered_switches: Switch[]) {
+    this.grid
+      .selectAll("rect")
+      .data(filtered_switches)
+      .join(
+        (enter) => enter.append("rect"),
+        (update) => update,
+        (end) => end.remove()
+      )
+      .attr("x", (d) => d.x + this.scale / 2 - this.rect_size / 2)
+      .attr("y", (d) => d.y + this.scale / 2 - this.rect_size / 2)
+      .attr("width", (d) => this.rect_size)
+      .attr("height", (d) => this.rect_size)
+      .attr("fill", "white")
+      .attr("stroke", "blue")
+      .attr("stroke-width", this.scale * 0.02);
+  }
 
-		this.draw_rect(filtered_switches);
-		// this.draw_text(filtered_switches);
-		
-		console.log("draw mesh ", this.scale);
-	}
+  // draw_text(filtered_switches: Switch[]) {
+  //   this.grid
+  //     .selectAll("text")
+  //     .data(filtered_switches)
+  //     .join(
+  //       function (enter) {
+  //         return enter.append("text");
+  //       },
+  //       function (update) {
+  //         return update;
+  //       },
+  //       function (exit) {
+  //         return exit.remove();
+  //       }
+  //     )
+  //     .attr("x", (d) => d.x - this.node_size / 2)
+  //     .attr("y", (d) => d.y)
+  //     .attr("font-size", this.rect_size / 5)
+  //     .text((d) => `${d.x}, ${d.y}`);
+  // }
 
-	initial_transform_param(): [number[], number] {
-		const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
+  draw() {
+    this.get_rect_size(); // get rectangle size
+    const filtered_switches = this.get_masked_node();
 
-		const canvas_width = canvas.node()!.clientWidth;
-		const canvas_height = canvas.node()!.clientHeight;
+    this.draw_rect(filtered_switches);
+    // this.draw_text(filtered_switches);
 
-		const scale_x = canvas_width / this.tile_width;
-		const scale_y = canvas_height / this.tile_height;
-		const scale = Math.min(scale_x, scale_y) * 0.9;
+    // console.log("draw mesh ", this.scale);
+  }
 
-		const translate_x = canvas_width / 2 - this.tile_width / 2 * scale;
-		const translate_y = canvas_height / 2 - this.tile_height / 2 * scale;
+  initial_transform_param(
+    canvas_width: number,
+    canvas_height: number
+  ): [number[], number] {
+    const scale_x = canvas_width / this.tile_width;
+    const scale_y = canvas_height / this.tile_height;
+    const scale = Math.min(scale_x, scale_y) * 0.9;
 
-		return [[translate_x, translate_y], scale];
-	}
+    const translate_x = canvas_width / 2 - (this.tile_width / 2) * scale;
+    const translate_y = canvas_height / 2 - (this.tile_height / 2) * scale;
 
-	initialize_zoom() {
-		const [initial_translate, initial_scale] =
-			this.initial_transform_param();
+    return [[translate_x, translate_y], scale];
+  }
 
-		const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
-		const zoomBehavior = d3.zoom<SVGSVGElement, unknown>();
-		canvas
-			.call(zoomBehavior.on("zoom", (e) => {
-				this.update_zoom(e.transform)
-				console.log(e.transform)
-			}))
-			.call(zoomBehavior.transform,
-				d3.zoomIdentity
-					.translate(initial_translate[0], initial_translate[1])
-					.scale(initial_scale)
-			);
-	}
+  initialize_zoom() {
+    const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
 
-	update_zoom(transform: d3.ZoomTransform) {
-		const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
-		const grid = d3.select<SVGGElement, unknown>("#grid");
+    const canvas_width = canvas.node()!.clientWidth;
+    const canvas_height = canvas.node()!.clientHeight;
+    console.log(canvas_width, canvas_height);
 
-		grid.attr("transform", transform.toString());
+    const [initial_translate, initial_scale] = this.initial_transform_param(
+      canvas_width,
+      canvas_height
+    );
 
-		const top_left = this.reverse_mapping([0, 0], transform);
-		const bottom_right = this.reverse_mapping(
-			[canvas.node()!.clientWidth, canvas.node()!.clientHeight],
-			transform);
-		const viewport_width = bottom_right[0] - top_left[0];
-		const viewport_height = bottom_right[1] - top_left[1];
+    const zoomBehavior = d3
+      .zoom<SVGSVGElement, unknown>()
+      // .translateExtent([[-initial_translate[0], -initial_translate[1]],
+      //   [-initial_translate[0]+canvas_width, -initial_translate[1]+canvas_height]])
+      // .scaleExtent([initial_scale, 1024]);
+    canvas
+      .call(
+        zoomBehavior.on("zoom", (e) => {
+          this.update_zoom(e.transform);
+          console.log(e.transform);
+        })
+      )
+      .call(
+        zoomBehavior.transform,
+        d3.zoomIdentity
+          .translate(initial_translate[0], initial_translate[1])
+          .scale(initial_scale)
+      );
+  }
 
-		this.min_x = top_left[0];
-		this.max_x = bottom_right[0];
-		this.min_y = top_left[1];
-		this.max_y = bottom_right[1];
+  update_zoom(transform: d3.ZoomTransform) {
+    const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
 
-		this.minimap.update_minimap_viewport_box(
-			top_left[1], top_left[0], viewport_width, viewport_height);
+    this.grid.attr("transform", transform.toString());
 
-		this.update_semantic_zoom(viewport_width, viewport_height);
-		console.log(viewport_height, viewport_width);
-	}
+    const top_left = this.reverse_mapping([0, 0], transform);
+    const bottom_right = this.reverse_mapping(
+      [canvas.node()!.clientWidth, canvas.node()!.clientHeight],
+      transform
+    );
+    const viewport_width = bottom_right[0] - top_left[0];
+    const viewport_height = bottom_right[1] - top_left[1];
 
-	update_semantic_zoom(width: number, height: number) {
-		let count = width * height;
-		this.scale = 1;
-		while (count > 500) { // At most 1000 nodes
-			count /= 16;
-			this.scale *= 4;
-		}
-		console.log(this.scale);
+    this.min_x = top_left[0];
+    this.max_x = bottom_right[0];
+    this.min_y = top_left[1];
+    this.max_y = bottom_right[1];
 
-		this.draw();
-	}
+    this.minimap.update_minimap_viewport_box(
+      top_left[1],
+      top_left[0],
+      viewport_width,
+      viewport_height
+    );
 
-	reverse_mapping(
-		coord: number[],
-		transform: d3.ZoomTransform,
-	): number[] {
-		const scale = transform.k;
-		const translate_x = transform.x;
-		const translate_y = transform.y;
+    this.update_semantic_zoom(viewport_width, viewport_height);
+    // console.log(viewport_height, viewport_width);
+  }
 
-		const x_ = (coord[0] - translate_x) / scale;
-		const y_ = (coord[1] - translate_y) / scale;
+  update_semantic_zoom(width: number, height: number) {
+    let count = width * height;
+    this.scale = 1;
+    while (count > 500) {
+      // At most 1000 nodes
+      count /= 16;
+      this.scale *= 4;
+    }
+    // console.log(this.scale);
 
-		return [x_, y_];
-	}
+    this.draw();
+  }
+
+  reverse_mapping(coord: number[], transform: d3.ZoomTransform): number[] {
+    const scale = transform.k;
+    const translate_x = transform.x;
+    const translate_y = transform.y;
+
+    const x_ = (coord[0] - translate_x) / scale;
+    const y_ = (coord[1] - translate_y) / scale;
+
+    return [x_, y_];
+  }
 }
 
-
 function generate_data(width: number, height: number): Switch[][] {
-	const switches: Switch[][] = [];
-	for (let i = 0; i < height; i++) {
-		switches.push([]);
-		for (let j = 0; j < width; j++) {
-			switches[i].push(new Switch(i * width + j, j, i));
-		}
-	}
+  const switches: Switch[][] = [];
+  for (let i = 0; i < height; i++) {
+    switches.push([]);
+    for (let j = 0; j < width; j++) {
+      switches[i].push(new Switch(i * width + j, j, i));
+    }
+  }
 
-	return switches;
+  return switches;
 }
 
 document.addEventListener("DOMContentLoaded", (event) => {
-	const tile_width = 1024;
-	const tile_height = 1024;
+  const tile_width = 1024;
+  const tile_height = 1024;
+  console.log("DOMCoententLoaded");
 
-	const switches = generate_data(tile_width, tile_height);
+  const switches = generate_data(tile_width, tile_height);
 
-	const minimap = new Minimap();
-	minimap.draw(tile_width, tile_height);
+  const minimap = new Minimap();
+  minimap.draw(tile_width, tile_height);
 
-	const main_view = new MainView(minimap, switches);
-	// main_view.draw();
-	main_view.initialize_zoom();
+  const main_view = new MainView(minimap, switches);
+  // main_view.draw();
+  main_view.initialize_zoom();
 });
-
-// class SwitchLevel {
-// 	level: number = 0
-// 	switches: Switch[] = []
-// 	width: number = 0
-// 	height: number = 0
-
-// 	constructor(level: number) {
-// 		this.level = level
-// 	}
-
-// 	addSwitch(s: Switch) {
-// 		this.switches.push(s!)
-
-// 		if (s!.x + 1 > this.width) {
-// 			this.width = s!.x + 1
-// 		}
-
-// 		if (s!.y + 1 > this.height) {
-// 			this.height = s!.y + 1
-// 		}
-// 	}
-
-// 	filter(minX: number, maxX: number, minY: number, maxY: number): Switch[] {
-// 		let maxCount = 1000
-// 		let nodes: Switch[] = []
-
-
-// 		for (let x = minX; x <= maxX && x < this.width; x++) {
-// 			for (let y = minY; y <= maxY && y < this.height; y++) {
-// 				let index = x + y * this.width
-// 				nodes.push(this.switches[index])
-
-// 				if (nodes.length > maxCount) {
-// 					return nodes
-// 				}
-// 			}
-// 		}
-
-// 		return nodes
-// 	}
-// }
-
-
-
-
-// class Renderer {
-// 	canvas?: HTMLElement
-// 	width: number
-// 	height: number
-// 	nodes: SwitchLevel[]
-// 	zoomLevel: number = 2.5
-// 	totalLevels: number = 0
-// 	baseSize: number = 200
-// 	zoomLevelToSizeMap: Map<number, [number, number, number]> = new Map();
-
-// 	constructor(canvas?: HTMLElement) {
-// 		this.canvas = canvas;
-// 		this.width = 1024
-// 		this.height = 1024
-
-// 		let width = this.width
-// 		let height = this.height
-// 		this.nodes = []
-// 		let level = 0
-// 		while (width > 1 && height > 1) {
-// 			let currLevelNodes = new SwitchLevel(level)
-
-// 			for (let i = 0; i < height; i++) {
-// 				for (let j = 0; j < width; j++) {
-// 					currLevelNodes.addSwitch(new Switch(j, i, level))
-// 				}
-// 			}
-// 			width /= 2
-// 			height /= 2
-// 			level += 1
-
-// 			this.nodes.push(currLevelNodes)
-// 		}
-
-// 		this.totalLevels = level
-// 		this.calculateNodeSize()
-// 	}
-
-// 	calculateNodeSize() {
-// 		let nodeSize = this.baseSize
-// 		let gapSize = this.baseSize / 2
-// 		let offset = gapSize
-// 		this.zoomLevelToSizeMap.set(0, [nodeSize, gapSize, offset])
-
-// 		for (let level = 1; level < this.totalLevels; level++) {
-// 			nodeSize = nodeSize * 2 + gapSize * 2
-// 			gapSize = nodeSize / 2
-// 			offset = offset
-// 			this.zoomLevelToSizeMap.set(level, [nodeSize, gapSize, offset])
-// 		}
-// 	}
-
-// 	zoom(delta: number) {
-// 		this.zoomLevel -= delta
-// 		if (this.zoomLevel < 1) {
-// 			this.zoomLevel = 1
-// 		}
-
-// 		console.log(`Zoom level: ${this.zoomLevel}`)
-// 		this.render()
-// 	}
-
-// 	render() {
-// 		let mainZoomLevel = Math.round(this.zoomLevel)
-// 		let levelsToDisplay = this.nodes.slice(
-// 			mainZoomLevel - 1, mainZoomLevel + 2).reverse()
-// 		if (levelsToDisplay.length == 0) {
-// 			if (mainZoomLevel < 2) {
-// 				levelsToDisplay.push(this.nodes[0])
-// 			} else {
-// 				levelsToDisplay.push(this.nodes[this.nodes.length - 1])
-// 			}
-// 		}
-
-// 		let levels = d3.select(this.canvas!)
-// 			.selectAll<SVGGElement, SwitchLevel>('g')
-// 			.data(levelsToDisplay, (d: SwitchLevel) => d.level)
-
-// 		let newLevels = levels.enter()
-// 			.append('g')
-// 			.attr('zoom-level', (d: SwitchLevel) => d.level)
-
-// 		newLevels.merge(levels).each((d, i, levels) => {
-// 			this.renderNodesInLevel(d, levels[i])
-// 		})
-
-// 		levels.exit().remove()
-// 	}
-
-// 	calculateLevelSize(
-// 		level: number,
-// 	): number[] {
-// 		let dominatingLevel = Math.ceil(this.zoomLevel)
-// 		let levelDiff = dominatingLevel - this.zoomLevel
-// 		const baseSize = this.baseSize * (3.3 ** levelDiff)
-
-// 		let gapSizes = [0, 0, 0, 0, baseSize * .1]
-// 		let nodeSize = baseSize * .9
-
-// 		for (let l = dominatingLevel; l >= level; l--) {
-// 			let gapSize = nodeSize / 2 * .2
-// 			gapSizes.push(gapSize)
-
-// 			nodeSize = nodeSize / 2 * .8
-// 		}
-
-// 		console.log(`ZoomLevel: ${this.zoomLevel}, Curr Level: ${level}, Sizes: ${nodeSize}, ${gapSizes}`)
-// 		// const baseSize = this.baseSize ** (1 / this.zoomLevel) / this.zoomLevel
-// 		// console.log(baseSize)
-
-// 		// let levelSize = baseSize
-// 		// for (let i = 0; i < level; i++) {
-// 		// 	levelSize *= 2
-// 		// }
-
-// 		// const ratio = 1 - 1 / this.zoomLevel
-// 		// const nodeSize = levelSize * ratio
-// 		// const gapSize = levelSize * (1 - ratio)
-// 		// const offsetSize = 0
-
-// 		return [nodeSize,
-// 			gapSizes[gapSizes.length - 1],
-// 			gapSizes[gapSizes.length - 2],
-// 			gapSizes[gapSizes.length - 3],
-// 			gapSizes[gapSizes.length - 4],
-// 			0
-// 		]
-// 	}
-
-// 	// calculateMainLevelSize(level: number): [number, number, number] {
-// 	// 	let baseSize = 100
-// 	// 	let levelDiff = level - this.zoomLevel
-// 	// 	let scaleCoeff = 3.3
-// 	// 	let levelSize = baseSize * Math.pow(scaleCoeff, levelDiff)
-
-// 	// 	return [levelSize * .5, levelSize * .5, levelSize]
-// 	// }
-
-// 	// calculateAboveLevelSize(level: number): [number, number, number] {
-// 	// 	let [baseSize, baseGap, baseOffset] = this.calculateLevelSize(level - 1)
-
-// 	// 	let baseLevelSize = baseSize + baseGap
-// 	// 	let levelSize = baseLevelSize * 2
-
-// 	// 	return [levelSize * .9, levelSize * .1, baseOffset - 0.25 * baseGap]
-// 	// }
-
-
-// 	renderNodesInLevel(
-// 		level: SwitchLevel, container: SVGGElement,
-// 	) {
-// 		let [nodeSize, gapSize, twoGapSize, fourGapSize, eightGapSize, offsetSize] =
-// 			this.calculateLevelSize(level.level)
-// 		let levelSize = nodeSize + gapSize
-
-// 		let canvas = document.getElementById('canvas')
-// 		let canvasWidth = canvas!.clientWidth
-// 		let canvasHeight = canvas!.clientHeight
-// 		let leftCoord = 0
-// 		let topCoord = 0
-// 		let rightCoord = canvasWidth / levelSize
-// 		let bottomCoord = canvasHeight / levelSize
-
-// 		let nodesToDisplay = level.filter(
-// 			leftCoord, rightCoord,
-// 			topCoord, bottomCoord,
-// 		)
-
-// 		let nodeList = d3.select(container)
-// 			.selectAll<SVGRectElement, Switch>('rect')
-// 			.data(nodesToDisplay, (d: Switch) => `${d.x}-${d.y}-${d.zoomLevel}`)
-
-// 		let newNodes = nodeList.enter()
-// 			.append('rect')
-// 		// .attr('x', (d: Switch) => {
-// 		// 	return d.x * levelSize + d.x / 2 * twoGapSize + d.x / 4 * fourGapSize + offsetSize
-// 		// })
-// 		// .attr('y', (d: Switch) => {
-// 		// 	return d.y * levelSize + d.y / 2 * twoGapSize + d.y / 4 * fourGapSize + offsetSize
-// 		// })
-// 		// .attr('width', nodeSize)
-// 		// .attr('height', nodeSize)
-// 		// .attr('fill', '#99d8c9')
-// 		// .attr('stroke', '#000000')
-// 		// .attr('stroke-width', 3)
-
-// 		newNodes.merge(nodeList)
-// 			.transition()
-// 			.duration(200)
-// 			.attr('x', (d: Switch) => {
-// 				return d.x * levelSize +
-// 					Math.floor(d.x / 2) * twoGapSize +
-// 					Math.floor(d.x / 4) * fourGapSize +
-// 					Math.floor(d.x / 8) * eightGapSize +
-// 					offsetSize
-// 			})
-// 			.attr('y', (d: Switch) => {
-// 				return d.y * levelSize +
-// 					Math.floor(d.y / 2) * twoGapSize +
-// 					Math.floor(d.y / 4) * fourGapSize +
-// 					Math.floor(d.y / 8) * eightGapSize +
-// 					offsetSize
-// 			})
-// 			.attr('width', nodeSize)
-// 			.attr('height', nodeSize)
-// 			.attr('fill', '#99d8c9')
-// 			.attr('stroke', '#000000')
-// 			.attr('stroke-width', 3)
-// 			.attr('opacity', (d: Switch) => {
-// 				if (this.zoomLevel > 10) {
-// 					return 1
-// 				}
-
-// 				if (Math.abs(d.zoomLevel - this.zoomLevel) < 1) {
-// 					return 1
-// 				}
-
-// 				return (2 - Math.abs(d.zoomLevel - this.zoomLevel)) / 2 + 0.5
-// 			})
-
-
-// 		nodeList.exit().remove();
-// 	}
-// }
-
-// let r = new Renderer(document.getElementById('grid')!);
-// r.render();
-
-// document.getElementById('canvas')!
-// 	.addEventListener('wheel', (e: WheelEvent) => {
-// 		r.zoom(e.deltaY / 3000)
-// 	})
-
