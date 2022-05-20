@@ -16,13 +16,22 @@ class Minimap {
   scale: number = 1024;
   offset_x: number = 0;
   offset_y: number = 0;
+  ratio: number;
 
-  constructor() {}
+  constructor() {
+    const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
+    const canvas_width = canvas.node()!.clientWidth;
+    const canvas_height = canvas.node()!.clientHeight;
+    this.ratio = canvas_width / canvas_height;
+  }
 
   draw(tile_width: number, tile_height: number) {
-    const canvas = document.getElementById("minimap")!;
-    const canvas_width = canvas.clientWidth;
-    const canvas_height = canvas.clientHeight;
+    const canvas_height = 150;
+    const canvas_width = canvas_height * this.ratio;
+
+    d3.select("#minimap")
+    .style("width", canvas_width)
+    .style("height", canvas_height);
 
     const width_scale = canvas_width / tile_width;
     const height_scale = canvas_height / tile_height;
@@ -80,6 +89,7 @@ class MainView {
     this.switches = switches;
   }
 
+  // center based, each center is (i, j) + (scale/2, scale/2)
   within_view(i_height: number, j_width: number): boolean {
     let center_y = i_height + this.scale / 2;
     let center_x = j_width + this.scale / 2;
@@ -102,20 +112,16 @@ class MainView {
 
   get_masked_node() {
     let filtered_switches: Switch[] = [];
-    for (let i = 0; i < this.tile_height; i++) {
-      for (let j = 0; j < this.tile_width; j++) {
-        if (
-          i % this.scale == 0 &&
-          j % this.scale == 0 &&
-          this.within_view(i, j)
-        ) {
+    for (let i = 0; i < this.tile_height; i += this.scale) {
+      for (let j = 0; j < this.tile_width; j += this.scale) {
+        if (this.within_view(i, j)) {
           filtered_switches.push(this.switches[i][j]);
         }
       }
     }
     return filtered_switches;
   }
-
+  
   draw_rect(filtered_switches: Switch[]) {
     this.grid
       .selectAll("rect")
@@ -190,12 +196,11 @@ class MainView {
       canvas_width,
       canvas_height
     );
-
-    const zoomBehavior = d3
-      .zoom<SVGSVGElement, unknown>()
-      // .translateExtent([[-initial_translate[0], -initial_translate[1]],
-      //   [-initial_translate[0]+canvas_width, -initial_translate[1]+canvas_height]])
-      // .scaleExtent([initial_scale, 1024]);
+    console.log(initial_translate);
+    const zoomBehavior = d3.zoom<SVGSVGElement, unknown>();
+    // .translateExtent([[-initial_translate[0], -initial_translate[1]],
+    //   [-initial_translate[0]+canvas_width, -initial_translate[1]+canvas_height]])
+    // .scaleExtent([initial_scale, 1024]);
     canvas
       .call(
         zoomBehavior.on("zoom", (e) => {
