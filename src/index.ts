@@ -30,8 +30,8 @@ class Minimap {
     const canvas_width = canvas_height * this.ratio;
 
     d3.select("#minimap")
-    .style("width", canvas_width)
-    .style("height", canvas_height);
+      .style("width", canvas_width)
+      .style("height", canvas_height);
 
     const width_scale = canvas_width / tile_width;
     const height_scale = canvas_height / tile_height;
@@ -50,6 +50,7 @@ class Minimap {
       .attr("stroke", "blue");
   }
 
+  // with bugs
   update_minimap_viewport_box(
     top: number,
     left: number,
@@ -68,6 +69,15 @@ class Minimap {
   }
 }
 
+interface rect_node {
+  level: number;
+  idx: number;
+  idy: number;
+  size: number;
+  x: number;
+  y: number;
+}
+
 class MainView {
   minimap: Minimap;
   tile_width: number;
@@ -78,6 +88,7 @@ class MainView {
   max_x: number = 0;
   min_y: number = 0;
   max_y: number = 0;
+  transform_scale: number = 0; // abstract node, size of scale*scale
   rect_size: number = 0; // reassign each time by this.draw()
   readonly node_size_ratio = 0.6;
   readonly grid = d3.select("#grid");
@@ -91,8 +102,8 @@ class MainView {
 
   // center based, each center is (i, j) + (scale/2, scale/2)
   within_view(i_height: number, j_width: number): boolean {
-    let center_y = i_height + this.scale / 2;
-    let center_x = j_width + this.scale / 2;
+    let center_y = i_height * this.scale + this.scale / 2;
+    let center_x = j_width * this.scale + this.scale / 2;
     let top = center_y - this.rect_size / 2;
     let bottom = top + this.rect_size;
     let left = center_x - this.rect_size / 2;
@@ -110,40 +121,68 @@ class MainView {
     this.rect_size = this.scale * this.node_size_ratio;
   }
 
-  get_masked_node() {
-    let filtered_switches: Switch[] = [];
-    for (let i = 0; i < this.tile_height; i += this.scale) {
-      for (let j = 0; j < this.tile_width; j += this.scale) {
+  get_primary_nodes() {
+    let primary_nodes = [];
+    let height = this.tile_height / this.scale;
+    let width = this.tile_width / this.scale;
+    for (let i = 0; i < height; i++) {
+      for (let j = 0; j < width; j++) {
         if (this.within_view(i, j)) {
-          filtered_switches.push(this.switches[i][j]);
+          primary_nodes.push({
+            level: this.scale,
+            idx: j,
+            idy: i,
+            x: j * this.scale + this.scale / 2 - this.rect_size / 2,
+            y: i * this.scale + this.scale / 2 - this.rect_size / 2,
+            size: this.rect_size,
+          });
         }
       }
     }
-    return filtered_switches;
-  }
-  
-  draw_rect(filtered_switches: Switch[]) {
-    this.grid
-      .selectAll("rect")
-      .data(filtered_switches)
-      .join(
-        (enter) => enter.append("rect"),
-        (update) => update,
-        (end) => end.remove()
-      )
-      .attr("x", (d) => d.x + this.scale / 2 - this.rect_size / 2)
-      .attr("y", (d) => d.y + this.scale / 2 - this.rect_size / 2)
-      .attr("width", (d) => this.rect_size)
-      .attr("height", (d) => this.rect_size)
-      .attr("fill", "white")
-      .attr("stroke", "blue")
-      .attr("stroke-width", this.scale * 0.02);
+
+    return primary_nodes;
   }
 
-  // draw_text(filtered_switches: Switch[]) {
+  get_sub_nodes(primary_nodes: rect_node[]) {
+    let draw_subrect =
+      this.scale * this.node_size_ratio * this.transform_scale > 300 &&
+      this.scale >= 4;
+
+    if (!draw_subrect) {
+      return [];
+    }
+    let sub_nodes = [];
+
+    let sub_scale = this.scale / 4;
+    let sub_cord_size = sub_scale * this.node_size_ratio;
+    let sub_rect_size = sub_cord_size * this.node_size_ratio;
+
+    for (let node of primary_nodes) {
+      let base_idx = node.idx * 4;
+      let base_idy = node.idy * 4;
+      let base_x = base_idx * sub_scale + 0.2 * this.scale;
+      let base_y = base_idy * sub_scale + 0.2 * this.scale;
+      for (let i = base_idy; i < base_idy + 4; i++) {
+        for (let j = base_idx; j < base_idx + 4; j++) {
+          sub_nodes.push({
+            level: sub_scale,
+            idx: j,
+            idy: i,
+            size: sub_rect_size,
+            x: base_x + 0.2 * sub_cord_size + (j - base_idx) * sub_cord_size,
+            y: base_y + 0.2 * sub_cord_size + (i - base_idy) * sub_cord_size,
+          });
+        }
+      }
+    }
+
+    return sub_nodes;
+  }
+
+  // draw_text(primary_nodes: Switch[]) {
   //   this.grid
   //     .selectAll("text")
-  //     .data(filtered_switches)
+  //     .data(primary_nodes)
   //     .join(
   //       function (enter) {
   //         return enter.append("text");
@@ -161,14 +200,43 @@ class MainView {
   //     .text((d) => `${d.x}, ${d.y}`);
   // }
 
+  draw_rect(nodes: rect_node[]) {
+    this.grid
+      .selectAll("rect")
+      .data(nodes, (d) => [d.level, d.idx, d.idy])
+      .join(
+        (enter) =>
+          enter
+            .append("rect")
+            .attr("x", (d) => d.x)
+            .attr("y", (d) => d.y)
+            .attr("width", (d) => d.size)
+            .attr("height", (d) => d.size)
+            .attr("fill", "white")
+            .attr("stroke", "blue")
+            .attr("stroke-width", (d) => d.level * 0.02),
+        (update) =>
+          update
+            .transition()
+            .duration(200)
+            .attr("x", (d) => d.x)
+            .attr("y", (d) => d.y)
+            .attr("width", (d) => d.size)
+            .attr("height", (d) => d.size)
+            .attr("fill", "white")
+            .attr("stroke", "blue")
+            .attr("stroke-width", (d) => d.level * 0.02),
+        (exit) => exit.remove()
+      );
+  }
+
   draw() {
     this.get_rect_size(); // get rectangle size
-    const filtered_switches = this.get_masked_node();
+    const primary_nodes = this.get_primary_nodes();
+    const sub_nodes = this.get_sub_nodes(primary_nodes);
+    this.draw_rect(primary_nodes.concat(sub_nodes));
 
-    this.draw_rect(filtered_switches);
-    // this.draw_text(filtered_switches);
-
-    // console.log("draw mesh ", this.scale);
+    // this.draw_text(primary_nodes);
   }
 
   initial_transform_param(
@@ -197,10 +265,11 @@ class MainView {
       canvas_height
     );
     console.log(initial_translate);
-    const zoomBehavior = d3.zoom<SVGSVGElement, unknown>();
-    // .translateExtent([[-initial_translate[0], -initial_translate[1]],
-    //   [-initial_translate[0]+canvas_width, -initial_translate[1]+canvas_height]])
-    // .scaleExtent([initial_scale, 1024]);
+    const zoomBehavior = d3
+      .zoom<SVGSVGElement, unknown>()
+      // .translateExtent([[-initial_translate[0], -initial_translate[1]],
+      //   [-initial_translate[0]+canvas_width, -initial_translate[1]+canvas_height]])
+      .scaleExtent([initial_scale, 1024]);
     canvas
       .call(
         zoomBehavior.on("zoom", (e) => {
@@ -218,6 +287,7 @@ class MainView {
 
   update_zoom(transform: d3.ZoomTransform) {
     const canvas = d3.select<SVGSVGElement, unknown>("#canvas");
+    this.transform_scale = transform.k;
 
     this.grid.attr("transform", transform.toString());
 
@@ -248,7 +318,7 @@ class MainView {
   update_semantic_zoom(width: number, height: number) {
     let count = width * height;
     this.scale = 1;
-    while (count > 500) {
+    while (count > 50) {
       // At most 1000 nodes
       count /= 16;
       this.scale *= 4;
